@@ -6,8 +6,14 @@
 #
 ##
 
+clean(){
+  cd ~-0
+  [[ ! -d $TMP ]] || rm -rf $TMP
+}
+
 error() {
   #error($E_TEXT,$E_CODE)
+  clean
 
   local E_TEXT=$1
   local E_CODE=$2
@@ -27,50 +33,66 @@ ok() {
 
 usage(){
   cat << EOF
-Usage: $0 [orig_src] [dir_src]
+Usage: $0 [orig_pkg] [debian_pkg] [dest]
 Get orig tar package and debian from a dir, compiles and copy debs back 
 EOF
 }
+
 usagee(){
   usage
   error "$1" "$2"
 }
 
+###
+#START
+###
+
 #enable errors
 set -e
 
-#tests
-[[ -n $1 ]] || error "need orig archive!"
-[[ -n $2 ]] || error "need source dir!"
-
 #ORIG=/path/name_ver.orig.tar.gz
 ORIG_SRC=$1
+DEB_SRC=$2
+DEST=${3:-.}
+
 ORIG=${ORIG_SRC##*/}
 
-DIR_SRC=$2
-
+#tests
 [[ -f $ORIG_SRC ]] || error "cannot find archive!"
-[[ -d $DIR_SRC ]] || error "cannot find source dir!"
+[[ -d $DEB_SRC ]] || error "cannot find source dir!"
 
-#copy it 
-cp "$ORIG_SRC" . || error "cannot cp orig archive here"
+#create tmp dir
+TMP=`mktemp -d`
+if (( $? )) 
+then error "Cannot create tmp dir"
+fi
+
+#copy orig 
+cp "$ORIG_SRC" "$TMP" || error "cannot cp orig stuff"
+
+#go there
+pushd "$TMP"
+
 #extract it
-tar -xf "${ORIG}" 
+tar -xf "${ORIG}" || error "cannot extract the orig"
 
 ORIG_VER=${ORIG/_/-}
 ORIG_DIR=${ORIG_VER%%.orig.tar.gz}
 
 #copy debian dir 
-cp -r "${DIR_SRC}/debian/" "$ORIG_DIR" 
+cp -r "${DEB_SRC}" "$ORIG_DIR/debian/" || 
+  error "cannot cp debian dir to src. is the source dir name formatted well?"  
 
 pushd "$ORIG_DIR"
 
 #build
-debuild -uc -us 
+debuild -uc -us || error 
 
 popd 
 
 #copy back
-cp *.deb "$DIR_SRC/.."
+cp * "$DEST"
+
+clean
 
 ok
