@@ -55,7 +55,7 @@ ORIG_SRC=$1
 DEB_SRC=$2
 DEST=${3:-.}
 
-ORIG=${ORIG_SRC##*/}
+ORIG=`basename "$ORIG_SRC"`
 
 #tests
 [[ -f $ORIG_SRC ]] || error "cannot find archive!"
@@ -67,8 +67,11 @@ if (( $? ))
 then error "Cannot create tmp dir"
 fi
 
+trap error INT KILL EXIT QUIT ABRT TERM
+
 #copy orig 
 cp "$ORIG_SRC" "$TMP" || error "cannot cp orig stuff"
+cp -r "$DEB_SRC" "$TMP" || error "cannot cp deb stuff"
 
 #go there
 pushd "$TMP"
@@ -76,22 +79,42 @@ pushd "$TMP"
 #extract it
 tar -xf "${ORIG}" || error "cannot extract the orig"
 
-ORIG_VER=${ORIG/_/-}
-ORIG_DIR=${ORIG_VER%%.orig.tar.gz}
+ORIG_DIR=${ORIG%%.orig.tar.gz}
+ORIG_NOR=${ORIG_DIR/_/-}
+ORIG_VER=${ORIG_DIR##*_}
+
+DEB=`basename "$DEB_SRC"`
 
 #copy debian dir 
-cp -r "${DEB_SRC}" "$ORIG_DIR/debian/" || 
+mv "${DEB}" "$ORIG_NOR/debian/" || 
   error "cannot cp debian dir to src. is the source dir name formatted well?"  
 
-pushd "$ORIG_DIR"
+pushd "$ORIG_NOR"
+
+#change version
+echo "Change version or update revision? (v/i)"
+read choice
+
+case $choice in
+  i) MOD="-i" ;;
+  v) MOD="-v $ORIG_VER";;
+  *) error ;;
+esac
+
+dch -M $MOD || error
 
 #build
-debuild -uc -us || error 
+debuild --no-lintian -uc -us || error
 
 popd 
+popd
 
 #copy back
-cp * "$DEST"
+cp $TMP/*.deb           "$DEST" || error
+cp $TMP/*.changes       "$DEST" || error
+cp $TMP/*.build         "$DEST" || error
+cp $TMP/*.dsc           "$DEST" || error
+cp $TMP/*.debian.tar.gz "$DEST" || error
 
 clean
 
