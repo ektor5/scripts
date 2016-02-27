@@ -4,7 +4,8 @@
 
 set -e
 
-DEST=$1
+COMMAND=$1
+DEST=$2
 declare -A F D
 
 print_iec() {
@@ -17,9 +18,15 @@ total() {
 }
 
 copy() {
-  #TODO
-  mkdir $DEST/$1
-  xargs -I% cp -vrp % $DEST/$1
+  local DEST=$1
+  mkdir -p "$DEST"
+  xargs -I% cp -vrp % "$DEST"
+}
+
+move() {
+  local DEST=$1
+  mkdir -p "$DEST"
+  xargs -I% mv % "$DEST"
 }
 
 compress() {
@@ -43,7 +50,7 @@ F[VIDEOS]=$(find -type f \( -name '*.mpg' -o -name '*.avi' \) -size +100M )
 F[VIDEOS_MINI]=$(find -type f \( -name '*.mpg' -o -name '*.avi' \) \
   ! -size +100M -size +20M )
 
-F[VIDEOS_MICRO]=$(find -type f \( -name '*.mpg' -o -name '*.avi' \) \
+F[VIDEOS_MINIMINI]=$(find -type f \( -name '*.mpg' -o -name '*.avi' \) \
   ! -size +20M )
 
 F[OTHERS]=$(find -type f ! \( -name '*.doc*' -o -name '*.odt' -o -name '*.xls*' -o \
@@ -63,24 +70,29 @@ TOTAL=$( for i in ${D[*]} ; do let S+=$i ; done ; echo $S )
 echo -en "\ntotal: "
 print_iec $TOTAL
 
-# ask for copy
+#check for command
+if [[ -n $COMMAND ]]
+then
+  case $COMMAND in
+    copy|compress|move) ;;
+    *) echo "Command not valid"; exit 1 ;;
+  esac
+fi
+
+# ask for action
 if [[ -n $DEST ]]
 then
-  [[ ! -d $DEST ]] && echo "error: dir not valid" && exit 1
 
-  echo "copy all the files in $DEST?"
+  echo "$COMMAND all the files in $DEST?"
   read choice
 
-  if [[ $choice == [yY] ]]
+  if [[ $choice == [yY]* ]]
   then
     #copy
     for i in ${!F[*]}
     do
-      #create dirs
-      mkdir -p "$DEST/$i" || exit 1
 
-      #copy everything in DEST/TYPE
-      cp -v ${F[$i]} "$DEST/$i"
+      for i in ${F[$i]} ; do echo $i ; done | $COMMAND "$DEST/$i"
 
     done
   fi
