@@ -9,7 +9,7 @@ WAN=${1:-"wlan0"}
 LAN=${2:-"eth0"}
 SOURCE=${3:-"192.168.0.0/24"}
 
-FLUSH=0 
+FLUSH=${FLUSH:-0}
 
 if [ $UID -ne 0 ]
 then
