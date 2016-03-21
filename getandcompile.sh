@@ -13,6 +13,7 @@ clean(){
 
 error() {
   #error($E_TEXT,$E_CODE)
+
   clean
 
   local E_TEXT=$1
@@ -20,6 +21,11 @@ error() {
 
   [[ -z $E_CODE ]] && E_CODE=1
   [[ -z $E_TEXT ]] || echo $E_TEXT
+
+  echo "Press enter to clean"
+  read
+  clean
+
   exit $E_CODE
 }
 
@@ -92,13 +98,14 @@ mv "${DEB}" "$ORIG_NOR/debian/" ||
 pushd "$ORIG_NOR"
 
 #change version
-echo "Change version or update revision? (v/i)"
+echo "Change version, update revision or release? (v/i/r)"
 read choice
 
 case $choice in
-  i) MOD="-i" ;;
-  v) MOD="-v $ORIG_VER";;
-  *) error ;;
+  v) MOD="--newversion $ORIG_VER" ;;
+  i) MOD="--increment 'Building release'" ;;
+  r) MOD="--release" ;;
+  *) error "Bad option" ;;
 esac
 
 dch -M $MOD || error
