@@ -4,11 +4,34 @@
 #
 # Ek5 @ 2015/12
 #
-##
-set -v
+#set -v
 
 clean () {
-  echo Nothing to clean...
+  log "Nothing to clean..."
+}
+
+GREEN="\e[32m"
+RED="\e[31m"
+BOLD="\e[1m"
+RST="\e[0m"
+
+function log() {
+  # args: string
+  local COLOR=${GREEN}${BOLD}  
+  local MOD="-e"
+
+  case $1 in
+    err) COLOR=${RED}${BOLD}
+      shift ;;
+    pre) MOD+="n" 
+      shift ;;
+    fat) COLOR=${RED}${BOLD}
+      shift ;;
+    *) ;;
+  esac
+
+  echo $MOD ${COLOR}$@${RST}
+
 }
 
 error() {
@@ -18,9 +41,9 @@ error() {
   local E_CODE=$2
 
   [[ -z $E_CODE ]] && E_CODE=1
-  [[ -z $E_TEXT ]] || echo $E_TEXT
+  [[ -z $E_TEXT ]] || log err "$E_TEXT"
 
-  echo "Press enter to clean"
+  log "Press enter to clean"
   read
   clean
 
@@ -31,7 +54,7 @@ ok() {
   #ok($OK_TEXT)
   local OK_TEXT=$1
   [[ -z $OK_TEXT ]] && OK_TEXT="Success!!"
-  [[ -z $OK_TEXT ]] || echo $OK_TEXT
+  [[ -z $OK_TEXT ]] || log $OK_TEXT
   exit 0
 }
 
@@ -54,7 +77,6 @@ usagee(){
 #enable errors
 set -e
 
-
 #ORIG=/path/name_ver.orig.tar.gz
 ORIG_SRC=$1
 DEB_SRC=$2
@@ -62,10 +84,49 @@ DEST=${3:-.}
 REM=${4}
 
 ORIG=`basename "$ORIG_SRC"`
+ORIG_DIR=${ORIG%%.orig.tar.gz}
+ORIG_NOR=${ORIG_DIR/_/-}
+ORIG_VER=${ORIG_DIR##*_}
+ 
+#base implementation
+cp_to () { cp $@ ; }
+cp_from () { cp $@ ; }
+
+#create tmp dir
+TMP_LOCAL=`mktemp -d`
+TMP=$TMP_LOCAL
+if (( $? ))
+then error "Cannot create tmp dir"
+fi
+
+clean(){
+  cd ~-0
+  $REMOTE_CLEAN
+  [[ ! -d $TMP ]] || rm -rf $TMP
+  [[ ! -d $TMP_LOCAL ]] || rm -rf $TMP_LOCAL
+}
+
+trap error INT KILL QUIT ABRT TERM
 
 #tests
 [[ -f $ORIG_SRC ]] || error "cannot find archive!"
-[[ -d $DEB_SRC ]] || error "cannot find source dir!"
+
+if [[ -d $DEB_SRC ]] 
+then
+  #make debian archive
+  [[ -f $DEB_SRC/control ]] || error "control missing"
+  [[ -f $DEB_SRC/changelog ]] || error "changelog missing"
+
+  DEB_ZIP_SRC="$TMP/${ORIG_DIR}.debian.tar.gz" 
+  tar -czf "$DEB_ZIP_SRC" -C "`dirname $DEB_SRC`" "debian/"  || error "Cannot make debian archive"
+  DEB_SRC=$DEB_ZIP_SRC
+
+elif [[ ! -f $DEB_SRC ]] 
+then
+  error "Debian dir/archive not valid"
+fi
+
+DEB=`basename "$DEB_SRC"`
 
 unset REMOTE
 
@@ -78,7 +139,7 @@ then
     then
       local OPT="$1"
       shift
-      local FILE="/"
+      local FILE="/`basename $1`"
       scp "$OPT" "$1" "$REM:$2$FILE"
     else
       local FILE="/`basename $1`"
@@ -95,13 +156,6 @@ then
    scp $OPT $REM:$1 $2
   }
 
-  TMP_FIFO="$(mktemp -u /tmp/fifo_tty-XXXXXX)"
-  mkfifo $TMP_FIFO
-
-  REMOTE="remote"
-  REMOTE_END="remote_end"
-  REMOTE_CLEAN="remote_clean"
-
   remote () {
     kill -0 $REMOTE_PID || error
     if (( $# ))
@@ -113,6 +167,10 @@ then
   }
 
   remote_end () {
+
+    #disable clean
+    remote trap - INT KILL EXIT QUIT ABRT TERM
+
     if (( $# ))
     then
       remote $@
@@ -120,37 +178,41 @@ then
       cat | remote
     fi
 
-    #disable clean
-    remote trap - INT KILL EXIT QUIT ABRT TERM
+    #close file descriptor, closes ssh connection
     exec 8>&-
   }
 
   remote_clean () {
-    ssh $REM << LOL
+    ssh $REM << LOL >> $REMOTE_LOG
     clean () {
       echo cleaning... ;
       cd ~-0 ;
       [[ ! -d $TMP ]] || rm -rf $TMP ;
     } ; clean ; exit 0
 LOL
-  }
-
-  clean(){
-    cd ~-0
-    [[ ! -e $TMP_FIFO ]] || rm -rf $TMP_FIFO
+    exec 8>&-
   }
 
   #copy id to remote
-  ssh-copy-id $REM || error "cannot copy keys"
+  log pre "Copying SSH keys to remote... "
+  ssh-copy-id $REM 2> /dev/null || error "cannot copy keys"
+  log "Done!"
+
+  TMP_FIFO="$(mktemp -u $TMP/fifo_tty-XXXXXX)"
+  mkfifo $TMP_FIFO
+
+  REMOTE="remote"
+  REMOTE_INIT="remote_init"
+  REMOTE_END="remote_end"
+  REMOTE_LOG="`basename ${ORIG_SRC%%.orig*}`_remote.log"
 
   TMP=`ssh $REM -- mktemp -d`
   (( $? )) && error "Cannot create remote temp dir"
 
-  REMOTE_INIT="remote_init"
   remote_init(){
 
     #open connection
-    ssh $REM < $TMP_FIFO > get.log 2>&1 &
+    ssh $REM < $TMP_FIFO > $REMOTE_LOG 2>&1 &
     REMOTE_PID=$!
 
     #keep fifo open
@@ -166,31 +228,19 @@ LOL
 LOL
 
     remote trap clean INT KILL EXIT QUIT ABRT TERM
-    remote echo starting...
-  }
-
-else
-  cp_to () { cp $@ ; }
-  cp_from () { cp $@ ; }
-
-  #create tmp dir
-  TMP=`mktemp -d`
-  if (( $? ))
-  then error "Cannot create tmp dir"
-  fi
-
-  clean(){
-    cd ~-0
-    [[ ! -d $TMP ]] || rm -rf $TMP
+    remote echo "starting..."
+    
+    #enable remote_clean
+    REMOTE_CLEAN="remote_clean"
   }
 
 fi
 
-trap error INT KILL QUIT ABRT TERM
-
 #copy orig
+log pre "Copying source files... "
 cp_to "$ORIG_SRC" "$TMP" || error "cannot cp orig stuff"
-cp_to -r "$DEB_SRC" "$TMP/" || error "cannot cp deb stuff"
+cp_to "$DEB_SRC" "$TMP" || error "cannot cp deb stuff"
+log "Done!"
 
 #start remote connection
 $REMOTE_INIT
@@ -199,17 +249,12 @@ $REMOTE_INIT
 $REMOTE pushd "$TMP"
 
 #extract it
-$REMOTE tar -xvf "${ORIG}" || error "cannot extract the orig"
-
-ORIG_DIR=${ORIG%%.orig.tar.gz}
-ORIG_NOR=${ORIG_DIR/_/-}
-ORIG_VER=${ORIG_DIR##*_}
-
-DEB=`basename "$DEB_SRC"`
+$REMOTE tar -xvf "${ORIG}" || error "cannot extract orig"
+$REMOTE tar -xvf "${DEB}" || error "cannot extract debian"
 
 #copy debian dir
-$REMOTE mv "${DEB}" "$ORIG_NOR/debian/" ||
-  error "cannot cp debian dir to src. is the source dir name formatted well?"
+$REMOTE mv "debian/" "$ORIG_NOR/debian/" ||
+  error "Cannot cp debian dir to src. is the source dir name formatted well?"
 
 $REMOTE pushd "$ORIG_NOR"
 
@@ -218,21 +263,25 @@ echo "Change version, update revision or release? (v/i/r)"
 read choice
 
 case $choice in
-  v) MOD="--newversion $ORIG_VER" ;;
+  v) MOD="--newversion $ORIG_VER 'Building release'" ;;
   i) MOD="--increment --upstream 'Building release'" ;;
-  r) MOD="--release" ;;
+  r) MOD="--release 'Building release'" ;;
   *) error "Bad option" ;;
 esac
 
-$REMOTE dch -M $MOD || error
+log pre "Updating changelog... "
+$REMOTE dch -M $MOD || error "debchange failed!"
+log "Done!"
 
 #build
-$REMOTE_END debuild --no-lintian -uc -us || error
+log pre "Building $ORIG_NOR... "
+$REMOTE_END debuild --no-lintian -uc -us || error "Build failed!"
 
 if (( REMOTE_PID ))
 then
-  wait $REMOTE_PID || error "remote exited with $?" $?
+  wait $REMOTE_PID || error "Remote exited with $?" $?
 fi
+log "Done!"
 
 #copy back
 cp_from $TMP/*.deb           "$DEST" || error
