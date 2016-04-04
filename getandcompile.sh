@@ -84,7 +84,7 @@ DEST=${3:-.}
 REM=${4}
 
 ORIG=`basename "$ORIG_SRC"`
-ORIG_DIR=${ORIG%%.orig.tar.gz}
+ORIG_DIR=${ORIG%%.orig.tar.*}
 ORIG_NOR=${ORIG_DIR/_/-}
 ORIG_VER=${ORIG_DIR##*_}
  
@@ -288,7 +288,7 @@ cp_from $TMP/*.deb           "$DEST" || error
 cp_from $TMP/*.changes       "$DEST" || error
 cp_from $TMP/*.build         "$DEST" || error
 cp_from $TMP/*.dsc           "$DEST" || error
-cp_from $TMP/*.debian.tar.gz "$DEST" || error
+cp_from $TMP/*.debian.tar.* "$DEST" || error
 
 $REMOTE_CLEAN
 
