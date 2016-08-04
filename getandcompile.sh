@@ -15,7 +15,7 @@ RED="\e[31m"
 BOLD="\e[1m"
 RST="\e[0m"
 
-function log() {
+log() {
   # args: string
   local COLOR=${GREEN}${BOLD}  
   local MOD="-e"
@@ -30,7 +30,7 @@ function log() {
     *) ;;
   esac
 
-  echo $MOD ${COLOR}$@${RST}
+  echo $MOD "${COLOR}${*}${RST}"
 
 }
 
@@ -83,7 +83,7 @@ DEB_SRC=$2
 DEST=${3:-.}
 REM=${4}
 
-ORIG=`basename "$ORIG_SRC"`
+ORIG=$(basename "$ORIG_SRC")
 ORIG_DIR=${ORIG%%.orig.tar.*}
 ORIG_NOR=${ORIG_DIR/_/-}
 ORIG_VER=${ORIG_DIR##*_}
@@ -93,40 +93,46 @@ cp_to () { cp $@ ; }
 cp_from () { cp $@ ; }
 
 #create tmp dir
-TMP_LOCAL=`mktemp -d`
-TMP=$TMP_LOCAL
-if (( $? ))
+if ! TMP=$(mktemp -d)
 then error "Cannot create tmp dir"
 fi
 
 clean(){
   cd ~-0
   $REMOTE_CLEAN
-  [[ ! -d $TMP ]] || rm -rf $TMP
-  [[ ! -d $TMP_LOCAL ]] || rm -rf $TMP_LOCAL
+  [[ ! -d $TMP ]] || rm -rf "$TMP"
 }
 
-trap error INT KILL QUIT ABRT TERM
+trap error INT QUIT ABRT TERM
 
 #tests
 [[ -f $ORIG_SRC ]] || error "cannot find archive!"
 
-if [[ -d $DEB_SRC ]] 
+if [[ -d $DEB_SRC ]]
 then
   #make debian archive
   [[ -f $DEB_SRC/control ]] || error "control missing"
   [[ -f $DEB_SRC/changelog ]] || error "changelog missing"
 
-  DEB_ZIP_SRC="$TMP/${ORIG_DIR}.debian.tar.gz" 
-  tar -czf "$DEB_ZIP_SRC" -C "`dirname $DEB_SRC`" "debian/"  || error "Cannot make debian archive"
+  DEB_ZIP_SRC="$TMP/${ORIG_DIR}.debian.tar.gz"
+  DEB_SRC_PATH=$(dirname "$DEB_SRC")
+  DEB_SRC_NAME=$(basename "$DEB_SRC")
+
+  tar -czf "$DEB_ZIP_SRC" \
+    -C "$DEB_SRC_PATH" \
+    --exclude '*~' --exclude "*.swp" --exclude "*.ex" \
+    --transform "s/^$DEB_SRC_NAME/debian/" \
+    "$DEB_SRC_NAME" || 
+      error "Cannot make debian archive"
+
   DEB_SRC=$DEB_ZIP_SRC
 
-elif [[ ! -f $DEB_SRC ]] 
+elif [[ ! -f $DEB_SRC ]]
 then
   error "Debian dir/archive not valid"
 fi
 
-DEB=`basename "$DEB_SRC"`
+DEB=$(basename "$DEB_SRC")
 
 unset REMOTE
 
@@ -250,11 +256,11 @@ $REMOTE pushd "$TMP"
 
 #extract it
 $REMOTE tar -xvf "${ORIG}" || error "cannot extract orig"
-$REMOTE tar -xvf "${DEB}" || error "cannot extract debian"
+$REMOTE tar -xvf "${DEB}" -C ${ORIG_NOR} || error "cannot extract debian"
 
 #copy debian dir
-$REMOTE mv "debian/" "$ORIG_NOR/debian/" ||
-  error "Cannot cp debian dir to src. is the source dir name formatted well?"
+#$REMOTE mv "debian/" "$ORIG_NOR/debian/" ||
+  #error "Cannot cp debian dir to src. is the source dir name formatted well?"
 
 $REMOTE pushd "$ORIG_NOR"
 
@@ -271,6 +277,7 @@ esac
 
 log pre "Updating changelog... "
 $REMOTE dch -M $MOD || error "debchange failed!"
+$REMOTE cat "debian/changelog"
 log "Done!"
 
 #build
@@ -288,7 +295,7 @@ cp_from $TMP/*.deb           "$DEST" || error
 cp_from $TMP/*.changes       "$DEST" || error
 cp_from $TMP/*.build         "$DEST" || error
 cp_from $TMP/*.dsc           "$DEST" || error
-cp_from $TMP/*.debian.tar.* "$DEST" || error
+cp_from $TMP/*.debian.tar.*  "$DEST" || error
 
 $REMOTE_CLEAN
 
