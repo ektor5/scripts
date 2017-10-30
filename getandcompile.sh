@@ -156,6 +156,15 @@ unset REMOTE
 #remote implementation
 if [[ -n ${REM} ]]
 then
+
+  PORT=${REM##*:}
+  REM=${REM%%:*}
+
+  if [ "$REM" == "$PORT" ]
+  then
+    PORT=22
+  fi
+
   #custom cp
   cp_to () {
     if [[ $1 == "-r" ]]
@@ -163,10 +172,10 @@ then
       local OPT="$1"
       shift
       local FILE="/`basename $1`"
-      scp "$OPT" "$1" "$REM:$2$FILE"
+      scp -P "$PORT" "$OPT" "$1" "$REM:$2$FILE"
     else
       local FILE="/`basename $1`"
-      scp "$1" "$REM:$2$FILE"
+      scp -P "$PORT" "$1" "$REM:$2$FILE"
     fi
 
   }
@@ -176,7 +185,7 @@ then
    then local OPT=$1
      shift
    fi
-   scp $OPT $REM:$1 $2
+   scp -P "$PORT" $OPT $REM:$1 $2
   }
 
   remote () {
@@ -206,7 +215,7 @@ then
   }
 
   remote_clean () {
-    ssh $REM << LOL >> $REMOTE_LOG
+    ssh -p "$PORT" $REM << LOL >> $REMOTE_LOG
     clean () {
       echo cleaning... ;
       cd ~-0 ;
@@ -218,7 +227,7 @@ LOL
 
   #copy id to remote
   log pre "Copying SSH keys to remote... "
-  ssh-copy-id $REM 2> /dev/null || error "cannot copy keys"
+  ssh-copy-id -p "$PORT" $REM 2> /dev/null || error "cannot copy keys"
   log "Done!"
 
   TMP_FIFO="$(mktemp -u $TMP/fifo_tty-XXXXXX)"
@@ -229,13 +238,13 @@ LOL
   REMOTE_END="remote_end"
   REMOTE_LOG="`basename ${ORIG_SRC%%.orig*}`_remote.log"
 
-  TMP=`ssh $REM -- mktemp -d`
+  TMP=`ssh -p "$PORT" $REM -- mktemp -d`
   (( $? )) && error "Cannot create remote temp dir"
 
   remote_init(){
 
     #open connection
-    ssh $REM < $TMP_FIFO > $REMOTE_LOG 2>&1 &
+    ssh -p "$PORT" $REM < $TMP_FIFO > $REMOTE_LOG 2>&1 &
     REMOTE_PID=$!
 
     #keep fifo open
