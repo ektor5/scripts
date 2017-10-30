@@ -80,6 +80,11 @@ usagee(){
 #enable errors
 set -e
 
+if (( $# > 4 ))
+then
+	usagee "Too many arguments"
+fi
+
 #ORIG=/path/name_ver.orig.tar.gz
 ORIG_SRC=$1
 DEB_SRC=$2
