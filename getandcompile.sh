@@ -60,8 +60,11 @@ ok() {
 
 usage(){
   cat << EOF
-Usage: $0 [orig_pkg] [debian_pkg] [dest] [remote]
+Usage: $0 orig_pkg debian_pkg dest [remote][:port]
 Get orig tar package and debian from a dir, compiles and copy debs back
+
+env switches:
+LINTIAN=1	exec lintian after build
 EOF
 }
 
