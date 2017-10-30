@@ -117,7 +117,11 @@ fi
 clean(){
   cd ~-0
   $REMOTE_CLEAN
-  [[ ! -d $TMP ]] || rm -rf "$TMP"
+
+  #clean local tmp
+  if [[ -d $TMP ]]
+  then rm -rf "$TMP"
+  fi
 }
 
 trap error INT QUIT ABRT TERM
@@ -201,11 +205,11 @@ then
   remote_end () {
 
     #disable clean
-    remote trap - INT KILL EXIT QUIT ABRT TERM
+    remote trap - INT EXIT QUIT ABRT TERM
 
     if (( $# ))
     then
-      remote $@
+      remote "$@"
     else
       cat | remote
     fi
@@ -219,7 +223,7 @@ then
     clean () {
       echo cleaning... ;
       cd ~-0 ;
-      [[ ! -d $TMP ]] || rm -rf $TMP ;
+      [[ -d $TMP ]] && rm -rf $TMP ;
     } ; clean ; exit 0
 LOL
     exec 8>&-
@@ -251,19 +255,22 @@ LOL
     exec 8> $TMP_FIFO
 
     remote set -evx
-    remote << LOL
-    clean () {
-      echo cleaning... ;
-      cd ~-0 ;
-      [[ ! -d $TMP ]] || rm -rf $TMP ;
-    } ;
-LOL
 
-    remote trap clean INT KILL EXIT QUIT ABRT TERM
-    remote echo "starting..."
+    #set remote clean
+    remote <<-LOL
+			clean () {
+				echo cleaning... ;
+				cd ~-0 ;
+				[[ ! -d $TMP ]] || rm -rf $TMP ;
+			} ;
+		LOL
+    remote trap clean INT EXIT QUIT ABRT TERM
+
     
     #enable remote_clean
     REMOTE_CLEAN="remote_clean"
+
+    remote echo "starting..."
   }
 
 fi
@@ -328,8 +335,6 @@ cp_from $TMP/*.changes       "$DEST" || error
 cp_from $TMP/*.build         "$DEST" || error
 cp_from $TMP/*.dsc           "$DEST" || error
 cp_from $TMP/*.debian.tar.*  "$DEST" || error
-
-$REMOTE_CLEAN
 
 clean
 
