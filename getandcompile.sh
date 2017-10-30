@@ -265,11 +265,12 @@ $REMOTE tar -xvf "${DEB}" -C ${ORIG_NOR} || error "cannot extract debian"
 $REMOTE pushd "$ORIG_NOR"
 
 #change version
-echo "Change version, update revision or release? (v/i/r)"
+echo "Change version, take from dir, increase revision or release? (v/d/i/r)"
 read choice
 
 case $choice in
   v) MOD="--newversion $ORIG_VER 'Building release'" ;;
+  d) MOD="--fromdirname 'Building release'" ;;
   i) MOD="--increment --upstream 'Building release'" ;;
   r) MOD="--release 'Building release'" ;;
   *) error "Bad option" ;;
