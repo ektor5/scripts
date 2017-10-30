@@ -271,7 +271,11 @@ fi
 #copy orig
 log pre "Copying source files... "
 cp_to "$ORIG_SRC" "$TMP" || error "cannot cp orig stuff"
-cp_to "$DEB_SRC" "$TMP" || error "cannot cp deb stuff"
+if [ -n "$REMOTE" ] 
+then
+	cp_to "$DEB_SRC" "$TMP" || error "cannot cp deb stuff"
+fi
+
 log "Done!"
 
 #start remote connection
@@ -280,8 +284,9 @@ $REMOTE_INIT
 #go there
 $REMOTE pushd "$TMP"
 
-#extract it
-$REMOTE tar -xvf "${ORIG}" || error "cannot extract orig"
+#extract it in ORIG_NOR dir name
+$REMOTE mkdir ${ORIG_NOR}
+$REMOTE tar -xvf "${ORIG}" --strip-components=1 -C ${ORIG_NOR} || error "cannot extract orig"
 $REMOTE tar -xvf "${DEB}" -C ${ORIG_NOR} || error "cannot extract debian"
 
 #copy debian dir
