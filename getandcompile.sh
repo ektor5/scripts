@@ -95,7 +95,16 @@ ORIG=$(basename "$ORIG_SRC")
 ORIG_DIR=${ORIG%%.orig.tar.*}
 ORIG_NOR=${ORIG_DIR/_/-}
 ORIG_VER=${ORIG_DIR##*_}
- 
+
+if (( LINTIAN ))
+then
+  LINTIAN=""
+else
+  LINTIAN="--no-lintian"
+fi 
+
+DEBUILD_ARGS="$LINTIAN -uc -us"
+
 #base implementation
 cp_to () { cp $@ ; }
 cp_from () { cp $@ ; }
@@ -291,7 +300,7 @@ log "Done!"
 
 #build
 log pre "Building $ORIG_NOR... "
-$REMOTE_END debuild --no-lintian -uc -us || error "Build failed!"
+$REMOTE_END debuild $DEBUILD_ARGS || error "Build failed!"
 
 if (( REMOTE_PID ))
 then
