@@ -108,6 +108,18 @@ DEBUILD_ARGS="$LINTIAN -uc -us"
 #base implementation
 cp_to () { cp $@ ; }
 cp_from () { cp $@ ; }
+prebuild () { 
+	[[ $UID != 0 ]] && return
+	if ! dpkg-checkbuilddeps 
+	then 
+		cd $1
+		mk-build-deps
+		dpkg -i *build-deps*.deb || apt-get install -f -y
+		rm *build-deps*.deb 
+		cd -
+	fi
+}
+
 
 #create tmp dir
 if ! TMP=$(mktemp -d)
@@ -229,6 +241,20 @@ LOL
     exec 8>&-
   }
 
+  prebuild () {
+	$REMOTE <<LOG
+	# check root
+	eval test \$UID -ne 0 && return
+	if ! dpkg-checkbuilddeps
+	then
+		cd $1
+		mk-build-deps
+		dpkg -i *build-deps*.deb || apt-get install -f -y
+		rm *build-deps*.deb
+	fi
+LOG
+  }
+
   #copy id to remote
   log pre "Copying SSH keys to remote... "
   ssh-copy-id -p "$PORT" $REM 2> /dev/null || error "cannot copy keys"
@@ -317,6 +343,11 @@ esac
 log pre "Updating changelog... "
 $REMOTE dch -M $MOD || error "debchange failed!"
 $REMOTE cat "debian/changelog"
+log "Done!"
+
+#prebuild needs root
+log pre "Installing dependences... "
+prebuild "$TMP/$ORIG_NOR"
 log "Done!"
 
 #build
